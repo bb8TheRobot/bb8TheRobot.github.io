@@ -14,21 +14,15 @@
     justify-content: center;
     gap: 3vw;
     overflow: hidden;
+    position: relative;
   }
   .heart {
     font-size: 20vw;
     color: #ff2e63;
-    animation: beat 1s ease-in-out infinite;
     filter: drop-shadow(0 0 30px #ff2e6390);
     user-select: none;
-    cursor: default;
-  }
-  @keyframes beat {
-    0%, 100% { transform: scale(1); }
-    15% { transform: scale(1.15); }
-    30% { transform: scale(1); }
-    45% { transform: scale(1.1); }
-    60% { transform: scale(1); }
+    cursor: pointer;
+    will-change: transform;
   }
   .download {
     padding: 1em 2.5em;
@@ -49,10 +43,108 @@
     box-shadow: 0 0 30px #ff2e63;
     transform: scale(1.05);
   }
+  .flash {
+    position: fixed;
+    inset: 0;
+    background: #ff0022;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 5;
+  }
+  .drip {
+    position: fixed;
+    top: -5vh;
+    width: 3vw;
+    min-width: 18px;
+    height: 0;
+    background: linear-gradient(#8a0011, #4d0009);
+    border-radius: 0 0 50% 50% / 0 0 30% 30%;
+    box-shadow: 0 0 10px #00000080;
+    z-index: 10;
+    transform-origin: top;
+  }
 </style>
 </head>
 <body>
-  <div class="heart">&#10084;</div>
+  <div class="heart" id="heart">&#10084;</div>
   <a class="download" href="hi.py" download>download</a>
+  <div class="flash" id="flash"></div>
+
+<script>
+const heart = document.getElementById('heart');
+const flash = document.getElementById('flash');
+
+let cycleDuration = 1000;
+let hits = 0;
+const maxHits = 6;
+let popped = false;
+let startTime = performance.now();
+
+const sweetSpot = { start: 0.12, end: 0.19 };
+
+function heartScale(phase) {
+  if (phase < 0.15) return 1 + 0.15 * (phase / 0.15);
+  if (phase < 0.30) return 1.15 - 0.15 * ((phase - 0.15) / 0.15);
+  if (phase < 0.45) return 1 + 0.10 * ((phase - 0.30) / 0.15);
+  if (phase < 0.60) return 1.10 - 0.10 * ((phase - 0.45) / 0.15);
+  return 1;
+}
+
+function getPhase(now) {
+  const elapsed = (now - startTime) % cycleDuration;
+  return elapsed / cycleDuration;
+}
+
+function tick(now) {
+  if (!popped) {
+    const phase = getPhase(now);
+    heart.style.transform = `scale(${heartScale(phase)})`;
+    requestAnimationFrame(tick);
+  }
+}
+requestAnimationFrame(tick);
+
+heart.addEventListener('click', () => {
+  if (popped) return;
+  const phase = getPhase(performance.now());
+  if (phase >= sweetSpot.start && phase <= sweetSpot.end) {
+    hits++;
+    startTime = performance.now();
+    cycleDuration *= 0.78;
+    if (hits >= maxHits) {
+      pop();
+    }
+  }
+});
+
+function pop() {
+  popped = true;
+  heart.style.transition = 'transform 0.15s ease-out, opacity 0.15s ease-out';
+  heart.style.transform = 'scale(2.5)';
+  heart.style.opacity = '0';
+  flash.style.transition = 'opacity 0.1s ease-out';
+  flash.style.opacity = '1';
+  setTimeout(() => { flash.style.transition = 'opacity 0.6s ease-in'; flash.style.opacity = '0'; }, 120);
+  spawnBlood();
+}
+
+function spawnBlood() {
+  const count = 40;
+  for (let i = 0; i < count; i++) {
+    setTimeout(() => {
+      const drip = document.createElement('div');
+      drip.className = 'drip';
+      drip.style.left = Math.random() * 100 + 'vw';
+      const duration = 1.5 + Math.random() * 2;
+      const finalHeight = 60 + Math.random() * 60;
+      drip.animate(
+        [{ height: '0vh' }, { height: finalHeight + 'vh' }],
+        { duration: duration * 1000, easing: 'cubic-bezier(.2,.6,.3,1)', fill: 'forwards' }
+      );
+      document.body.appendChild(drip);
+    }, Math.random() * 900);
+  }
+}
+</script>
 </body>
 </html>
