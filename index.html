@@ -220,29 +220,31 @@ function pop() {
   startBloodBuildup();
 }
 
-function spawnDrips(count, sizeMin, sizeMax) {
+function spawnDrips(count, sizeMin, sizeMax, maxStagger) {
   for (let i = 0; i < count; i++) {
     setTimeout(() => {
       const drip = document.createElement('div');
       drip.className = 'drip';
       drip.style.left = Math.random() * 100 + 'vw';
-      const duration = 1.2 + Math.random() * 2;
+      drip.style.width = (2 + Math.random() * 2.5) + 'vw';
+      const duration = 0.8 + Math.random() * 1.2;
       const finalHeight = sizeMin + Math.random() * (sizeMax - sizeMin);
       drip.animate(
         [{ height: '0vh' }, { height: finalHeight + 'vh' }],
         { duration: duration * 1000, easing: 'cubic-bezier(.2,.6,.3,1)', fill: 'forwards' }
       );
       document.body.appendChild(drip);
-    }, Math.random() * 500);
+    }, Math.random() * maxStagger);
   }
 }
 
 function startBloodBuildup() {
   let round = 0;
   let level = 0;
+  spawnDrips(10, 30, 60, 120);
   const interval = setInterval(() => {
     round++;
-    spawnDrips(4 + round * 2, 40 + round * 5, 90 + round * 8);
+    spawnDrips(4 + round * 2, 40 + round * 5, 90 + round * 8, 300);
     level += 0.08 + round * 0.01;
     bloodOverlay.style.opacity = Math.min(level, 1);
     if (level >= 1) {
