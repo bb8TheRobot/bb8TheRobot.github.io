@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>bb8therobot</title>
+<style>
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #0d0d0d;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3vw;
+    overflow: hidden;
+  }
+  .heart {
+    font-size: 20vw;
+    color: #ff2e63;
+    animation: beat 1s ease-in-out infinite;
+    filter: drop-shadow(0 0 30px #ff2e6390);
+    user-select: none;
+    cursor: default;
+  }
+  @keyframes beat {
+    0%, 100% { transform: scale(1); }
+    15% { transform: scale(1.15); }
+    30% { transform: scale(1); }
+    45% { transform: scale(1.1); }
+    60% { transform: scale(1); }
+  }
+  .download {
+    padding: 1em 2.5em;
+    font-size: 1.3rem;
+    font-family: Arial, sans-serif;
+    font-weight: bold;
+    color: #ff2e63;
+    background: #1a1a1a;
+    border: 2px solid #ff2e63;
+    border-radius: 999px;
+    text-decoration: none;
+    box-shadow: 0 0 15px #ff2e6350;
+    transition: all 0.2s ease;
+  }
+  .download:hover {
+    background: #ff2e63;
+    color: #0d0d0d;
+    box-shadow: 0 0 30px #ff2e63;
+    transform: scale(1.05);
+  }
+</style>
+</head>
+<body>
+  <div class="heart">&#10084;</div>
+  <a class="download" href="hi.py" download>download</a>
+</body>
+</html>
