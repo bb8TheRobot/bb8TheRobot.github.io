@@ -2,6 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>bb8therobot</title>
 <style>
   html, body {
@@ -10,27 +11,47 @@
     width: 100%;
     background: #0d0d0d;
   }
+  /* nur body ist flex-container - html mit rein zu nehmen schrumpft body auf inhaltsbreite */
   body {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 3vw;
-    position: relative;
+    gap: 4vh;
     overflow: hidden;
   }
-  .heart {
-    padding: 5vw;
-    font-size: 20vw;
-    color: #ff2e63;
-    filter: drop-shadow(0 0 10px #ff2e6360);
-    user-select: none;
+  .clickme {
+    padding: 1.2em 3.2em;
+    font-size: clamp(1.2rem, 5vw, 2rem);
+    font-family: Arial, sans-serif;
+    font-weight: bold;
+    letter-spacing: 0.12em;
+    color: #fff;
+    background: #e10025;
+    border: 3px solid #ff5a72;
+    border-radius: 16px;
     cursor: pointer;
-    will-change: transform;
+    user-select: none;
+    box-shadow: 0 0 30px #e1002580, inset 0 -6px 0 #8e000f;
+    transition: box-shadow 0.2s ease, transform 0.08s ease;
+  }
+  .clickme:hover {
+    box-shadow: 0 0 45px #e10025, inset 0 -6px 0 #8e000f;
+  }
+  .clickme:active {
+    transform: translateY(4px) scale(0.97);
+    box-shadow: 0 0 15px #e10025, inset 0 -1px 0 #8e000f;
+  }
+  .clickme.unleashed {
+    animation: spin 0.4s linear infinite;
+    box-shadow: 0 0 60px #e10025, inset 0 -6px 0 #8e000f;
+  }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
   .download {
     padding: 1em 2.5em;
-    font-size: 1.3rem;
+    font-size: 1.1rem;
     font-family: Arial, sans-serif;
     font-weight: bold;
     color: #ff2e63;
@@ -47,224 +68,90 @@
     box-shadow: 0 0 30px #ff2e63;
     transform: scale(1.05);
   }
-  .flash {
-    position: fixed;
-    inset: 0;
-    background: #ff0022;
-    opacity: 0;
-    pointer-events: none;
-    z-index: 5;
-  }
-  .bloodOverlay {
-    position: fixed;
-    inset: 0;
-    background: #6a000f;
-    opacity: 0;
-    pointer-events: none;
-    z-index: 8;
-  }
-  .drip {
-    position: fixed;
-    top: -5vh;
-    width: 3vw;
-    min-width: 18px;
-    height: 0;
-    background: linear-gradient(#8a0011, #4d0009);
-    border-radius: 0 0 50% 50% / 0 0 30% 30%;
-    box-shadow: 0 0 10px #00000080;
-    z-index: 10;
-    transform-origin: top;
-  }
 </style>
 </head>
 <body>
-  <div class="heart" id="heart">&#10084;</div>
+  <button class="clickme" id="clickme" type="button">CLICK ME</button>
   <a class="download" href="hi.py" download>HI &lt;3</a>
-  <div class="flash" id="flash"></div>
-  <div class="bloodOverlay" id="bloodOverlay"></div>
 
 <script>
-const heart = document.getElementById('heart');
-const flash = document.getElementById('flash');
-const bloodOverlay = document.getElementById('bloodOverlay');
-
-let cycleDuration = 1000;
-let hits = 0;
-const maxHits = 6;
-let popped = false;
-let startTime = performance.now();
-
-const sweetSpot = { start: 0.12, end: 0.19 };
+/* pro klick 0.1s vom song - fortlaufend, nie von vorn. ab 20 klicks der ganze song auf loop */
+const clickBtn = document.getElementById('clickme');
+const SNIPPET = 0.1;
+const LOOP_AT = 20;
 
 let audioCtx = null;
+let songBuf = null;
+let songOffset = 0;
+let songClicks = 0;
+let looping = false;
+let loopSrc = null;
+let snippetSrc = null;
+
 function ensureAudio() {
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   return audioCtx;
 }
 
-function playHeartbeat(type) {
+fetch('oiia.mp3')
+  .then(res => {
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return res.arrayBuffer();
+  })
+  .then(data => ensureAudio().decodeAudioData(data))
+  .then(buf => { songBuf = buf; })
+  .catch(err => { console.warn('oiia.mp3 nicht ladbar - button bleibt stumm:', err); });
+
+function playSnippet() {
   const ctx = ensureAudio();
+  if (snippetSrc) {
+    try { snippetSrc.stop(); } catch (e) {}
+  }
+  const src = ctx.createBufferSource();
+  src.buffer = songBuf;
+  // kurze rampen, sonst knackt der harte schnitt bei 0.1s
+  const gain = ctx.createGain();
   const t0 = ctx.currentTime;
-  const isLub = type === 'lub';
-  const startFreq = isLub ? 160 : 130;
-  const endFreq = isLub ? 45 : 40;
-  const vol = isLub ? 0.5 : 0.35;
-  const osc = ctx.createOscillator();
-  osc.type = 'sine';
-  osc.frequency.setValueAtTime(startFreq, t0);
-  osc.frequency.exponentialRampToValueAtTime(endFreq, t0 + 0.12);
-  const gain = ctx.createGain();
-  gain.gain.setValueAtTime(vol, t0);
-  gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.18);
-  osc.connect(gain).connect(ctx.destination);
-  osc.start(t0);
-  osc.stop(t0 + 0.2);
+  const fade = 0.008;
+  gain.gain.setValueAtTime(0, t0);
+  gain.gain.linearRampToValueAtTime(1, t0 + fade);
+  gain.gain.setValueAtTime(1, t0 + SNIPPET - fade);
+  gain.gain.linearRampToValueAtTime(0, t0 + SNIPPET);
+  src.connect(gain).connect(ctx.destination);
+  src.start(t0, songOffset % songBuf.duration, SNIPPET);
+  src.onended = () => { if (snippetSrc === src) snippetSrc = null; };
+  snippetSrc = src;
+  songOffset = (songOffset + SNIPPET) % songBuf.duration;
 }
 
-function playPop() {
+function startLoop() {
+  if (looping) return;
+  looping = true;
   const ctx = ensureAudio();
-  const bufferSize = ctx.sampleRate * 0.4;
-  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-  const data = buffer.getChannelData(0);
-  for (let i = 0; i < bufferSize; i++) {
-    data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+  if (snippetSrc) {
+    try { snippetSrc.stop(); } catch (e) {}
+    snippetSrc = null;
   }
-  const noise = ctx.createBufferSource();
-  noise.buffer = buffer;
-  const filter = ctx.createBiquadFilter();
-  filter.type = 'lowpass';
-  filter.frequency.setValueAtTime(1200, ctx.currentTime);
-  filter.frequency.exponentialRampToValueAtTime(60, ctx.currentTime + 0.4);
-  const gain = ctx.createGain();
-  gain.gain.setValueAtTime(0.9, ctx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
-  noise.connect(filter).connect(gain).connect(ctx.destination);
-  noise.start();
+  const src = ctx.createBufferSource();
+  src.buffer = songBuf;
+  src.loop = true;
+  src.connect(ctx.destination);
+  src.start(0, songOffset % songBuf.duration);
+  loopSrc = src;
+  clickBtn.classList.add('unleashed');
 }
 
-function shakeScreen(duration, maxAmp) {
-  const start = performance.now();
-  function frame(now) {
-    const t = now - start;
-    if (t > duration) {
-      document.body.style.transform = '';
-      return;
-    }
-    const amp = maxAmp * (1 - t / duration);
-    const dx = (Math.random() * 2 - 1) * amp;
-    const dy = (Math.random() * 2 - 1) * amp;
-    document.body.style.transform = `translate(${dx}px, ${dy}px)`;
-    requestAnimationFrame(frame);
-  }
-  requestAnimationFrame(frame);
-}
-
-function heartScale(phase) {
-  if (phase < 0.15) return 1 + 0.15 * (phase / 0.15);
-  if (phase < 0.30) return 1.15 - 0.15 * ((phase - 0.15) / 0.15);
-  if (phase < 0.45) return 1 + 0.10 * ((phase - 0.30) / 0.15);
-  if (phase < 0.60) return 1.10 - 0.10 * ((phase - 0.45) / 0.15);
-  return 1;
-}
-
-function getPhase(now) {
-  const elapsed = (now - startTime) % cycleDuration;
-  return elapsed / cycleDuration;
-}
-
-let lastPhase = 1;
-
-function tick(now) {
-  if (!popped) {
-    const phase = getPhase(now);
-    heart.style.transform = `scale(${heartScale(phase)})`;
-    if (phase < lastPhase) {
-      playHeartbeat('lub');
-    } else if (lastPhase < 0.30 && phase >= 0.30) {
-      playHeartbeat('dub');
-    }
-    lastPhase = phase;
-    requestAnimationFrame(tick);
-  }
-}
-requestAnimationFrame(tick);
-
-heart.addEventListener('click', () => {
-  if (popped) return;
+clickBtn.addEventListener('click', () => {
   const ctx = ensureAudio();
   if (ctx.state === 'suspended') ctx.resume();
-  const phase = getPhase(performance.now());
-  if (phase >= sweetSpot.start && phase <= sweetSpot.end) {
-    hits++;
-    startTime = performance.now();
-    lastPhase = 1;
-    cycleDuration *= 0.78;
-    if (hits >= maxHits - 2) {
-      shakeScreen(400, (hits - (maxHits - 3)) * 6);
-    }
-    if (hits >= maxHits) {
-      pop();
-    }
+  if (!songBuf || looping) return;
+  songClicks++;
+  if (songClicks >= LOOP_AT) {
+    startLoop();
+  } else {
+    playSnippet();
   }
 });
-
-function pop() {
-  popped = true;
-  heart.style.transition = 'opacity 0.08s ease-out';
-  heart.style.opacity = '0';
-  flash.style.transition = 'opacity 0.1s ease-out';
-  flash.style.opacity = '1';
-  setTimeout(() => { flash.style.transition = 'opacity 0.6s ease-in'; flash.style.opacity = '0'; }, 120);
-  playPop();
-  shakeScreen(600, 25);
-  startBloodBuildup();
-}
-
-function spawnDrips(count, sizeMin, sizeMax, maxStagger) {
-  for (let i = 0; i < count; i++) {
-    setTimeout(() => {
-      const drip = document.createElement('div');
-      drip.className = 'drip';
-      drip.style.left = Math.random() * 100 + 'vw';
-      drip.style.width = (2 + Math.random() * 2.5) + 'vw';
-      const duration = 0.8 + Math.random() * 1.2;
-      const finalHeight = sizeMin + Math.random() * (sizeMax - sizeMin);
-      drip.animate(
-        [{ height: '0vh' }, { height: finalHeight + 'vh' }],
-        { duration: duration * 1000, easing: 'cubic-bezier(.2,.6,.3,1)', fill: 'forwards' }
-      );
-      document.body.appendChild(drip);
-    }, Math.random() * maxStagger);
-  }
-}
-
-function startBloodBuildup() {
-  let round = 0;
-  let level = 0;
-  spawnDrips(10, 30, 60, 120);
-  const interval = setInterval(() => {
-    round++;
-    spawnDrips(4 + round * 2, 40 + round * 5, 90 + round * 8, 300);
-    level += 0.08 + round * 0.01;
-    bloodOverlay.style.opacity = Math.min(level, 1);
-    if (level >= 1) {
-      clearInterval(interval);
-      setTimeout(downloadReadme, 500);
-    }
-  }, 450);
-}
-
-function downloadReadme() {
-  const blob = new Blob(["Why did you do that.\nyou broke my heart"], { type: 'text/plain' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'README.txt';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
 </script>
 </body>
 </html>
